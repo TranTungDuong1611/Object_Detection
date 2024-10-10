@@ -32,7 +32,9 @@ class NeuralNetwork:
             self.biases.append(bias_vector)
 
         self.node_values = [np.zeros(n) for n in hidden_layer]
-
+    def softmax(self, Z):
+        exp_Z = np.exp(Z - np.max(Z, axis=1, keepdims=True))  # For numerical stability
+        return exp_Z / np.sum(exp_Z, axis=1, keepdims=True)
     def relu(self, Z):
         return np.maximum(0, Z)
 
@@ -63,7 +65,7 @@ class NeuralNetwork:
         Z_output = np.dot(A, self.weights[-1]) + self.biases[-1]
         z.append(Z_output)
         # Classification (use sigmoid) and regression (linear)
-        classification_output = self.sigmoid(Z_output[:, -self.num_classes:])
+        classification_output = self.softmax(Z_output[:, -self.num_classes:])
         regression_output = Z_output[:, :-self.num_classes]
 
         activations.append(Z_output)
@@ -257,11 +259,11 @@ class NeuralNetwork:
                 print(f"Epoch {epoch}: Cross Entropy Loss: {cross_entropy_loss}, MSE Loss: {mse_loss}")
 
 # Parameters for the test
-num_samples = 1000  # Large number of samples
-num_features = 100    # Number of input features
+num_samples = 200  # Large number of samples
+num_features = 980    # Number of input features
 num_classes = 10      # Number of classes (e.g., for object detection)
-hidden_layer = [100, 100]  # Hidden layer sizes
-epochs = 500        # Number of epochs for training
+hidden_layer = [200, 100]  # Hidden layer sizes
+epochs = 3000        # Number of epochs for training
 learning_rate = 0.01  # Learning rate
 
 # Generate synthetic input data (X) and true labels (y)
