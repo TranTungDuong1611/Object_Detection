@@ -81,7 +81,7 @@ class RegionProposalNetwork(nn.Module):
         self.neg_thres = 0.3
         
         # Weight loss
-        self.w_conf = 2
+        self.w_conf = 3
         self.w_reg = 5
         
         self.feature_extractor = BackboneVGG16()
@@ -231,7 +231,7 @@ class TwoStageDetector(nn.Module):
         cls_loss = self.classifier(feature_map, pos_proposals_list, GT_class_pos)
         total_loss = cls_loss + total_rpn_loss
         
-        return total_loss
+        return total_loss/8
     
     def inference(self, images, conf_thresh=0.5, nms_thresh=0.7):
         batch_size = images.size(dim=0)
