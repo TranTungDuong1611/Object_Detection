@@ -10,14 +10,15 @@ from utils import *
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') 
 
-class BackboneResnet50(nn.Module):
+class BackboneVGG16(nn.Module):
     def __init__(self):
         super().__init__()
-        model = torchvision.models.resnet50(weights='IMAGENET1K_V1', progress=True)
-        feature_maps = list(model.children())[:8]
+        model = torchvision.models.vgg16(weights='IMAGENET1K_V1', progress=True)
+        feature_maps = list(model.children())[:2]
+        feature_maps = feature_maps[0][:30]
         self.backbone = nn.Sequential(*feature_maps)
-        for param in self.backbone.named_parameters():
-            param[1].requires_grad = True
+        for param in self.backbone.parameters():
+            param.requires_grad = True
         
     def forward(self, img_data):
         return self.backbone(img_data)
@@ -80,15 +81,15 @@ class RegionProposalNetwork(nn.Module):
         self.neg_thres = 0.3
         
         # Weight loss
-        self.w_conf = 1
+        self.w_conf = 2
         self.w_reg = 5
         
-        self.feature_extractor = BackboneResnet50()
+        self.feature_extractor = BackboneVGG16()
         self.proposal_module = ProposalModule(in_features=out_channels)
         
     def forward(self, images, gt_bboxes, gt_classes):
         batch_size = images.size(dim=0)
-        feature_map = self.feature_extractor(images)
+        feature_map = self.feature_extractor(images) 
         
         # generate anchors
         anc_x, anc_y = gen_anc_centers(out_size=(self.out_h, self.out_w))
@@ -118,6 +119,8 @@ class RegionProposalNetwork(nn.Module):
             # generate anchors
             anc_pts_x, anc_pts_y = gen_anc_centers(out_size=(self.out_h, self.out_w))
             anc_base = gen_anc_base(anc_pts_x, anc_pts_y, self.anc_scales, self.anc_ratios, (self.out_h, self.out_w))
+
+            # print(f"Anchor base: {anc_base}")
             anc_boxes_all = anc_base.repeat(batch_size, 1, 1, 1, 1)
             anc_boxes_flat = anc_boxes_all.reshape(batch_size, -1, 4)
 
