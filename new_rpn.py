@@ -49,7 +49,7 @@ CNN_back_bone = nn.Sequential(*list(VGG16_model.features.children())[:-1])
 # [:-1]: bỏ lớp cuối (lớp pooling)
 
 anchor_ratio = [[1, 1], [1, 2], [2, 1]] #tỉ lệ các anchor
-anchor_size = [128, 256, 512]
+anchor_size = [8, 16, 32]
 
 class RPN(nn.Module):
     def __init__(self,input_channels, k=9):
@@ -82,7 +82,7 @@ class RPNLoss(nn.Module):
             cls_shape = [B, T, 1] T = 256 : Batch size, T số lượng anchor, số lượng phân loại nhãn cho mỗi anchor -> 1
             reg_shape = [B, N, M, 4] N*M = 2400 : Batch size, N chiều cao, M chiều rộng của feature maps, 4 giá trị cần dự đoán
         '''
-        nums = cls_gt.shape[1]
+        nums = cls_gt.shape[1] ###
         # cls loss
         cls_loss = self.cls_loss(cls_pred, cls_gt)
 
@@ -101,6 +101,8 @@ class RPNLoss(nn.Module):
 
         loss = cls_loss + self.lam_reg * reg_loss
         return loss
+
+loss_fn = RPNLoss()
 
 !kaggle datasets download -d zaraks/pascal-voc-2007
 
@@ -131,13 +133,13 @@ def convert_box(bbox, btype='edge'):
 def IoU(box1, box2):
     box1 = convert_box(box1).unsqueeze(1)
     box2 = convert_box(box2).unsqueeze(0)
-    Area1 = (box1[...,2] - box1[...,0]) * (box1[...,3] - box1[...,1])
-    Area2 = (box2[...,2] - box2[...,0]) * (box2[...,3] - box2[...,1])
+    Area1 = (box1[...,2] - box1[...,0]+1) * (box1[...,3] - box1[...,1]+1)
+    Area2 = (box2[...,2] - box2[...,0]+1) * (box2[...,3] - box2[...,1]+1)
     I_x_min = torch.max(box1[...,0], box2[...,0])
     I_y_min = torch.max(box1[...,1], box2[...,1])
     I_x_max = torch.min(box1[...,2], box2[...,2])
     I_y_max = torch.min(box1[...,3], box2[...,3])
-    I_area = (I_x_max - I_x_min) * (I_y_max - I_y_min)
+    I_area = (I_x_max - I_x_min+1) * (I_y_max - I_y_min+1)
     U_area = Area1 + Area2 - I_area
     I_area[I_x_min >= I_x_max] = 0
     I_area[I_y_min >= I_y_max] = 0
@@ -180,7 +182,7 @@ class Pascal_Dataset(object):
         else:
             bboxes_nums = bboxes.shape[0]
             bboxes = torch.cat((bboxes, torch.zeros(50-bboxes_nums, 4)))
-            return img, cls_gt, reg_gt, inside_weight, bboxes
+            return img, cls_gt, reg_gt, bboxes
 
     def get_img_name(self):
         imgs = self.json_file['images']
@@ -202,7 +204,7 @@ class Pascal_Dataset(object):
         size = self.imgs_size[img_id]
         return [bbox[1]/size[0]*size_img[0], bbox[0]/size[1]*size_img[1], bbox[3]/size[0]*size_img[0], bbox[2]/size[1]*size_img[1]]
 
-    def build_gt(self, bboxes, pos_thresh=0.5, neg_thresh=0.4):
+    def build_gt(self, bboxes, pos_thresh=0.7, neg_thresh=0.3):
         '''
             input: img:tensor, bboxes:tensor
             output: cls_gt:tensor, reg_gt:tensor
@@ -228,6 +230,7 @@ class Pascal_Dataset(object):
         neg_index = torch.argwhere(max_overlap < neg_thresh)
         if (pos_index.shape[0] > self.fg_nums):
             pos_index = pos_index[torch.randperm(pos_index.shape[0])[:self.fg_nums]]
+
             label[pos_index] = 1
             bbox_inside_weight[pos_index] = 1
         else:
@@ -330,9 +333,9 @@ torch.manual_seed(seed)
 LEARNING_RATE = 1e-3
 DEVICE = "cuda" if torch.cuda.is_available else "cpu"
 # DEVICE = 'cpu'
-BATCH_SIZE = 16
+BATCH_SIZE = 32
 WEIGHT_DECAY = 0
-EPOCHS = 2
+EPOCHS = 3
 NUM_WORKERS = 2
 PIN_MEMORY = True
 LOAD_MODEL = False
@@ -422,8 +425,6 @@ test_loader = DataLoader(
     shuffle=True,
     drop_last=True,
 )
-
-t = train_dataset[1]
 
 LOAD_MODEL_FILE = "d07-RPN-20_epochs.pth"
 
@@ -601,23 +602,6 @@ def evaluate(test_loader, model):
 
 
 
-"""def evalue(test_loader, model):
-    loop = tqdm(test_loader, leave=True)
-    CNN_back_bone.eval()
-    reg_accuracies = []
-    cls_accuracies = []
-    for test_idx, (x, cls_gt, reg_gt, bboxes) in enumerate(loop):
-        x, cls_gt, reg_gt, bboxes = x.to(DEVICE), cls_gt.to(DEVICE), reg_gt.to(DEVICE), bboxes.to(DEVICE)
-        with torch.no_grad():
-            feature_map =  CNN_back_bone(x)
-            cls_pred, reg_pred = model(feature_map)
-        bbox_pred = rebuild_bbox(reg_pred)
-        reg_accuracy = cal_reg_accuracy(cls_pred, bbox_pred, bboxes)
-        cls_accuracy = cal_cls_accuracy(cls_pred, cls_gt)
-        reg_accuracies.append(reg_accuracy)
-        cls_accuracies.append(cls_accuracy)
-        print(f'reg_accuracy: {reg_accuracy}, cls_accuracy: {cls_accuracy}')
-    print(f'mean_reg: {sum(reg_accuracies)/len(reg_accuracies)}, mean_cls: {sum(cls_accuracies)/len(cls_accuracies)}')
-    """
 
-evaluate(train_loader, model)
+
+#evaluate(train_loader, model)
